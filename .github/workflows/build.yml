@@ -14,14 +14,40 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Zip dhundo aur kholo
+      - name: Find and extract the ZIP
         id: src
         run: |
-          set -e
-          if [ -f settings.gradle ] || [ -f settings.gradle.kts ]; then
-            echo "dir=." >> "$GITHUB_OUTPUT"
-          else
-            ZIP=$(find . -maxdepth 2 -iname '*.zip' -not -path './.git/*' | head -n1)
-            if [ -z "$ZIP" ]; then echo "::error::Repo mein koi .zip nahi mili"; exit 1; fi
-            mkdir -p "$RUNNER_TEMP/src"
-            unzip -q -o "$ZIP" -d "$RUNNER_TEMP/src"
+          mkdir -p "$RUNNER_TEMP/src"
+          find . -maxdepth 2 -iname "*.zip" -exec unzip -q -o {} -d "$RUNNER_TEMP/src" \;
+          SETTINGS=$(find . "$RUNNER_TEMP/src" -name settings.gradle -not -path "*/__MACOSX/*" | head -n1)
+          test -n "$SETTINGS"
+          echo "dir=$(dirname "$SETTINGS")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: 8.7
+
+      - name: Build debug APK
+        working-directory: ${{ steps.src.outputs.dir }}
+        run: gradle assembleDebug --no-daemon
+
+      - name: Copy APK
+        run: |
+          mkdir -p "$RUNNER_TEMP/apk"
+          cp "${{ steps.src.outputs.dir }}"/app/build/outputs/apk/debug/*.apk "$RUNNER_TEMP/apk/GlassIcons.apk"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GlassIcons-debug-apk
+          path: ${{ runner.temp }}/apk/GlassIcons.apk
+
+      - name: Publish to Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "build-${{ github.run_number }}" "$RUNNER_TEMP/apk/GlassIcons.apk" --repo "${{ github.repository }}" --title "Glass Icons build ${{ github.run_number }}" --notes "Auto-built APK"
