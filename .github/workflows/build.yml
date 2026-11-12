@@ -1,0 +1,27 @@
+name: Build APK from ZIP
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip dhundo aur kholo
+        id: src
+        run: |
+          set -e
+          if [ -f settings.gradle ] || [ -f settings.gradle.kts ]; then
+            echo "dir=." >> "$GITHUB_OUTPUT"
+          else
+            ZIP=$(find . -maxdepth 2 -iname '*.zip' -not -path './.git/*' | head -n1)
+            if [ -z "$ZIP" ]; then echo "::error::Repo mein koi .zip nahi mili"; exit 1; fi
+            mkdir -p "$RUNNER_TEMP/src"
+            unzip -q -o "$ZIP" -d "$RUNNER_TEMP/src"
